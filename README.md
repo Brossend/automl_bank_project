@@ -357,6 +357,10 @@ Workflow выполняет:
 - `docker compose build` - образ успешно собран;
 - `docker compose up` - пайплайн выполнен, контейнер завершился с кодом 0.
 
+GitHub-репозиторий:
+
+https://github.com/Brossend/automl_bank_project
+
 Ссылка на GitLab-репозиторий:
 
 https://gitlab.com/Brossend2335/automl_bank_project
