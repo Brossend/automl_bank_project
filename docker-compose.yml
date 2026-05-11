@@ -1,0 +1,10 @@
+services:
+  automl-bank-marketing:
+    build: .
+    container_name: automl-bank-marketing
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./reports:/app/reports
+      - ./mlruns:/app/mlruns
+    command: python -m src.train
