@@ -361,6 +361,10 @@ Workflow выполняет:
 
 https://gitlab.com/Brossend2335/automl_bank_project
 
+Ссылка на успешно выполненный GitLab Pipeline:
+
+https://gitlab.com/Brossend2335/automl_bank_project/-/pipelines/2515617869
+
 ---
 
 ## 13. Мониторинг
