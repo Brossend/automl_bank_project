@@ -1,93 +1,516 @@
-# automl_bank_project
+# Автоматизация ML-пайплайна на датасете Bank Marketing
 
+> **Дисциплина:** "Автоматизация машинного обучения" 
+> **Преподаватель:** Елена Смысловских  
+> **Студент:** Лямцев Иван Алексеевич   
+> **Формат проекта:** индивидуальная работа  
+> **Тема проекта:** автоматизация ML-пайплайна для прогнозирования отклика клиента на банковское предложение
 
+---
 
-## Getting started
+## 1. Описание бизнес-задачи
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+Цель проекта - построить и автоматизировать ML-пайплайн, который прогнозирует, подпишется ли клиент банка на срочный депозит после маркетингового контакта.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+Бизнес-смысл задачи: банк проводит кампании обзвона клиентов. Если заранее определить клиентов с высокой вероятностью положительного отклика, можно:
 
-## Add your files
+- повысить эффективность маркетинговой кампании;
+- снизить затраты на нецелевые звонки;
+- приоритизировать клиентов для менеджеров;
+- улучшить конверсию в оформление срочного депозита.
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+Тип задачи машинного обучения: **бинарная классификация**.
 
+Целевой признак: `y`.
+
+- `yes` - клиент подписался на срочный депозит;
+- `no` - клиент не подписался.
+
+---
+
+## 2. Датасет
+
+В проекте используется открытый датасет **Bank Marketing** из **UCI Machine Learning Repository**.
+
+Источник датасета:  
+https://archive.ics.uci.edu/dataset/222/bank+marketing
+
+Датасет содержит данные прямых маркетинговых кампаний португальского банковского учреждения. Кампании проводились с помощью телефонных звонков. Задача датасета - предсказать, подпишется ли клиент на срочный депозит.
+
+Характеристики датасета:
+
+- **предметная область:** бизнес;
+- **тип задачи:** классификация;
+- **тип данных:** табличные данные;
+- **признаки:** категориальные и числовые;
+- **целевой признак:** `y`;
+- **пропущенные значения:** отсутствуют.
+
+В проекте используется файл `bank.csv`, то есть уменьшенная версия датасета, удобная для быстрого тестирования автоматизированного ML-пайплайна.
+
+---
+
+## 3. Используемые признаки
+
+Примеры признаков:
+
+| Признак | Описание |
+|---|---|
+| `age` | возраст клиента |
+| `job` | тип занятости |
+| `marital` | семейное положение |
+| `education` | уровень образования |
+| `default` | наличие кредитного дефолта |
+| `balance` | средний годовой баланс |
+| `housing` | наличие ипотечного кредита |
+| `loan` | наличие персонального кредита |
+| `contact` | тип коммуникации |
+| `campaign` | количество контактов в рамках кампании |
+| `pdays` | количество дней после предыдущего контакта |
+| `previous` | количество прошлых контактов |
+| `poutcome` | результат предыдущей кампании |
+
+Признак `duration` исключается из обучения, потому что он описывает длительность текущего звонка. В реальном бизнес-сценарии до звонка это значение неизвестно, поэтому его использование может привести к утечке данных.
+
+---
+
+## 4. Архитектура ML-пайплайна
+
+Общая схема пайплайна:
+
+```text
+UCI Dataset
+    ↓
+Download / Extract
+    ↓
+ETL
+    ↓
+Train / Validation / Test split
+    ↓
+Preprocessing
+    ├── StandardScaler для числовых признаков
+    └── OneHotEncoder для категориальных признаков
+    ↓
+AutoML через Optuna
+    ├── выбор модели
+    └── подбор гиперпараметров
+    ↓
+Обучение лучшей модели
+    ↓
+Оценка качества
+    ↓
+Сохранение модели, метрик, графиков и MLflow-логов
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/Brossend2335/automl_bank_project.git
-git branch -M main
-git push -uf origin main
+
+---
+
+## 5. ETL
+
+ETL реализован в файле:
+
+```text
+src/etl.py
 ```
 
-## Integrate with your tools
+### Extract
 
-* [Set up project integrations](https://gitlab.com/Brossend2335/automl_bank_project/-/settings/integrations)
+Загрузка датасета выполняется из **UCI Machine Learning Repository** через файл:
 
-## Collaborate with your team
+```text
+src/download_data.py
+```
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+Команда:
 
-## Test and Deploy
+```bash
+python -m src.download_data
+```
 
-Use the built-in continuous integration in GitLab.
+### Transform
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+На этапе обработки данных выполняется:
 
-***
+- удаление дублей;
+- нормализация текстовых значений;
+- обработка потенциальных пропусков;
+- преобразование целевого признака `y` из `yes/no` в `1/0`;
+- удаление признака `duration` для предотвращения утечки данных.
 
-# Editing this README
+### Load
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+Подготовленные данные передаются в ML-пайплайн для обучения и оценки модели.
 
-## Suggestions for a good README
+---
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+## 6. AutoML / автоматизация обучения
 
-## Name
-Choose a self-explaining name for your project.
+Автоматизация ML-модели реализована через библиотеку **Optuna**.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+Optuna автоматически перебирает:
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+- тип модели;
+- набор гиперпараметров;
+- параметры регуляризации;
+- глубину деревьев;
+- количество деревьев;
+- минимальные ограничения на разбиения в деревьях.
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+В проекте сравниваются следующие модели:
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+- `LogisticRegression`;
+- `RandomForestClassifier`;
+- `ExtraTreesClassifier`.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+Основная метрика для оптимизации:
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+```text
+F1-score
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+Причина выбора F1-score: в задаче есть дисбаланс классов, поэтому одной accuracy недостаточно. F1-score учитывает и precision, и recall.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+Файл обучения:
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+```text
+src/train.py
+```
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+Запуск обучения:
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```bash
+python -m src.train
+```
 
-## License
-For open source projects, say how it is licensed.
+---
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+## 7. Метрики модели
+
+Для оценки качества используются:
+
+- Accuracy;
+- Precision;
+- Recall;
+- F1-score;
+- ROC-AUC;
+- Confusion Matrix;
+- ROC Curve.
+
+После обучения метрики сохраняются в файл:
+
+```text
+reports/metrics.json
+```
+
+Результаты Optuna сохраняются в файл:
+
+```text
+reports/tables/optuna_trials.csv
+```
+
+Лучшая модель по результатам AutoML: `ExtraTreesClassifier`.
+
+Лучшие параметры:
+
+```text
+n_estimators = 94
+max_depth = 17
+min_samples_split = 7
+min_samples_leaf = 1
+```
+
+---
+
+## 8. Визуализации
+
+После запуска обучения создаются графики:
+
+```text
+reports/figures/target_distribution.png
+reports/figures/confusion_matrix.png
+reports/figures/roc_curve.png
+reports/figures/metrics.png
+```
+
+![Target distribution](reports/figures/target_distribution.png)
+![Metrics](reports/figures/metrics.png)
+![Confusion matrix](reports/figures/confusion_matrix.png)
+![ROC curve](reports/figures/roc_curve.png)
+
+Модель показала ROC-AUC = 0.72, что означает умеренную способность модели отделять клиентов, склонных к подписке на депозит, от клиентов, которые не подпишутся.
+
+Accuracy = 0.83, однако из-за дисбаланса классов эта метрика не является основной. Целевой класс "yes" встречается значительно реже, поэтому дополнительно анализируются precision, recall и F1-score.
+
+Precision = 0.30, recall = 0.38, F1-score = 0.33. Это показывает, что модель находит часть клиентов, склонных к подписке, но качество можно улучшать за счёт балансировки классов, расширения признаков, увеличения числа итераций AutoML и подбора порога классификации.
+
+---
+
+## 9. MLflow
+
+Для логирования экспериментов используется **MLflow**.
+
+Логируются:
+
+- лучшие гиперпараметры;
+- accuracy;
+- precision;
+- recall;
+- F1-score;
+- ROC-AUC;
+- обученная модель;
+- графики.
+
+Запуск MLflow UI:
+
+```bash
+mlflow ui
+```
+
+После запуска интерфейс будет доступен по адресу:
+
+```text
+http://127.0.0.1:5000
+```
+
+---
+
+## 10. Тестирование
+
+Тесты реализованы с помощью `pytest`.
+
+Файлы тестов:
+
+```text
+tests/test_etl.py
+tests/test_train.py
+```
+
+Проверяется:
+
+- очистка данных;
+- удаление дублей;
+- нормализация текстовых значений;
+- преобразование целевого признака;
+- исключение признака `duration`;
+- корректное разделение на train/test;
+- работа preprocessing-пайплайна;
+- корректный расчёт метрик.
+
+Запуск тестов:
+
+```bash
+pytest
+```
+
+---
+
+## 11. Docker
+
+Для воспроизводимого запуска проекта используется Docker.
+
+Сборка контейнера:
+
+```bash
+docker compose build
+```
+
+Запуск пайплайна:
+
+```bash
+docker compose up
+```
+
+Контейнер выполняет команду:
+
+```bash
+python -m src.train
+```
+
+Docker сохраняет результаты в локальные директории:
+
+```text
+models/
+reports/
+mlruns/
+```
+
+---
+
+## 12. CI/CD
+
+CI/CD реализован двумя способами:
+
+1. GitHub Actions - файл `.github/workflows/ci.yml`.
+2. GitLab CI/CD - файл `.gitlab-ci.yml`.
+
+Workflow выполняет:
+1. загрузку репозитория;
+2. установку Python 3.11;
+3. установку зависимостей;
+4. запуск тестов `python -m pytest`;
+5. сборку Docker-образа.
+
+На момент сдачи GitHub Actions не запускается из-за ограничения аккаунта GitHub: `GitHub Actions is currently disabled for your account`.
+
+Для дополнительной проверки добавлен GitLab CI/CD.  
+Работоспособность шагов также проверена локально:
+- `python -m pytest` - 6 passed;
+- `docker compose build` - образ успешно собран;
+- `docker compose up` - пайплайн выполнен, контейнер завершился с кодом 0.
+
+Ссылка на GitLab-репозиторий:
+
+https://gitlab.com/Brossend2335/automl_bank_project
+
+---
+
+## 13. Мониторинг
+
+Мониторинг реализован на двух уровнях.
+
+### Мониторинг качества модели
+
+Используются:
+
+- F1-score;
+- ROC-AUC;
+- Precision;
+- Recall;
+- Confusion Matrix;
+- распределение целевого класса.
+
+Это позволяет контролировать качество ML-модели и понимать, насколько хорошо она определяет клиентов с вероятностью подписки на депозит.
+
+### Мониторинг инфраструктуры
+
+Файл:
+
+```text
+src/monitor.py
+```
+
+Скрипт собирает:
+
+- загрузку CPU;
+- использование RAM.
+
+Запуск:
+
+```bash
+python -m src.monitor
+```
+
+Результат сохраняется в файл:
+
+```text
+reports/tables/resource_monitoring.csv
+```
+
+---
+
+## 14. Запуск проекта локально
+
+### 1. Создать виртуальное окружение
+
+```bash
+python -m venv .venv
+```
+
+Windows:
+
+```bash
+.venv\Scripts\activate
+```
+
+Linux/macOS:
+
+```bash
+source .venv/bin/activate
+```
+
+### 2. Установить зависимости
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Скачать датасет
+
+```bash
+python -m src.download_data
+```
+
+### 4. Запустить обучение
+
+```bash
+python -m src.train
+```
+
+### 5. Запустить тесты
+
+```bash
+pytest
+```
+
+### 6. Запустить мониторинг ресурсов
+
+```bash
+python -m src.monitor
+```
+
+### 7. Запустить MLflow UI
+
+```bash
+mlflow ui
+```
+
+---
+
+## 15. Структура проекта
+
+```text
+.
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── data/
+│   ├── raw/
+│   └── processed/
+├── docs/
+│   ├── presentation_outline.md
+│   └── teacher_note.md
+├── models/
+├── reports/
+│   ├── figures/
+│   └── tables/
+├── src/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── download_data.py
+│   ├── etl.py
+│   ├── evaluate.py
+│   ├── monitor.py
+│   ├── predict.py
+│   └── train.py
+├── tests/
+│   ├── test_etl.py
+│   └── test_train.py
+├── Dockerfile
+├── docker-compose.yml
+├── Makefile
+├── README.md
+└── requirements.txt
+```
+
+---
+
+## 16. Выводы для бизнеса
+
+Разработанный ML-пайплайн позволяет автоматизировать процесс обучения модели для прогнозирования отклика клиента на банковское предложение.
+
+Практическая польза для бизнеса:
+
+- можно заранее выделять клиентов с высокой вероятностью подписки на депозит;
+- можно снижать нагрузку на операторов;
+- можно уменьшать количество неэффективных звонков;
+- можно повышать конверсию маркетинговой кампании;
+- можно регулярно переобучать модель при появлении новых данных.

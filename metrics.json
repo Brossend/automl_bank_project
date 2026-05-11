@@ -1,0 +1,35 @@
+{
+  "best_params": {
+    "model": "extra_trees",
+    "et_n_estimators": 94,
+    "et_max_depth": 17,
+    "et_min_samples_split": 7,
+    "et_min_samples_leaf": 1
+  },
+  "best_validation_f1": 0.4444444444444444,
+  "test_metrics": {
+    "accuracy": 0.8287292817679558,
+    "precision": 0.3023255813953488,
+    "recall": 0.375,
+    "f1": 0.33476394849785407,
+    "roc_auc": 0.7154158263708826
+  },
+  "rows": 4521,
+  "features_used": [
+    "age",
+    "job",
+    "marital",
+    "education",
+    "default",
+    "balance",
+    "housing",
+    "loan",
+    "contact",
+    "day",
+    "month",
+    "campaign",
+    "pdays",
+    "previous",
+    "poutcome"
+  ]
+}
