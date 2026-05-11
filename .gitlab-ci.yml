@@ -1,0 +1,41 @@
+stages:
+  - test
+  - build
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_DRIVER: overlay2
+
+cache:
+  paths:
+    - .cache/pip
+
+test:
+  image: python:3.11
+  stage: test
+  before_script:
+    - python --version
+    - python -m pip install --upgrade pip
+    - pip install -r requirements.txt
+  script:
+    - mkdir -p reports/tables
+    - python -m pytest --junitxml=reports/tables/pytest-report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: reports/tables/pytest-report.xml
+    paths:
+      - reports/tables/pytest-report.xml
+    expire_in: 1 week
+
+docker-build:
+  image: docker:24
+  stage: build
+  services:
+    - name: docker:24-dind
+      alias: docker
+  script:
+    - docker version
+    - docker build -t automl-bank-marketing .

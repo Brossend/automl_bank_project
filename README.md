@@ -337,23 +337,29 @@ mlruns/
 
 ## 12. CI/CD
 
-CI/CD реализован через GitHub Actions.
+CI/CD реализован двумя способами:
 
-Файл workflow:
+1. GitHub Actions - файл `.github/workflows/ci.yml`.
+2. GitLab CI/CD - файл `.gitlab-ci.yml`.
 
-```text
-.github/workflows/ci.yml
-```
+Workflow выполняет:
+1. загрузку репозитория;
+2. установку Python 3.11;
+3. установку зависимостей;
+4. запуск тестов `python -m pytest`;
+5. сборку Docker-образа.
 
-При каждом push или pull request выполняются:
+На момент сдачи GitHub Actions не запускается из-за ограничения аккаунта GitHub: `GitHub Actions is currently disabled for your account`.
 
-1. загрузка репозитория;
-2. установка Python 3.11;
-3. установка зависимостей;
-4. запуск тестов `pytest`;
-5. сборка Docker-образа.
+Для дополнительной проверки добавлен GitLab CI/CD.  
+Работоспособность шагов также проверена локально:
+- `python -m pytest` - 6 passed;
+- `docker compose build` - образ успешно собран;
+- `docker compose up` - пайплайн выполнен, контейнер завершился с кодом 0.
 
-Это демонстрирует непрерывную интеграцию и проверку проекта при изменениях в репозитории.
+Ссылка на GitLab-репозиторий:
+
+https://gitlab.com/Brossend2335/automl_bank_project
 
 ---
 
