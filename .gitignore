@@ -13,7 +13,7 @@ data/raw/*.csv
 data/raw/*.txt
 data/processed/*.csv
 
-models/*.joblib
+#models/*.joblib
 models/*.pkl
 #reports/figures/*.png
 #reports/tables/*.csv
