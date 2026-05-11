@@ -476,7 +476,6 @@ mlflow ui
 │   ├── raw/
 │   └── processed/
 ├── docs/
-│   ├── presentation_outline.md
 │   └── teacher_note.md
 ├── models/
 ├── reports/
