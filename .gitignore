@@ -16,7 +16,7 @@ data/processed/*.csv
 models/*.joblib
 models/*.pkl
 #reports/figures/*.png
-reports/tables/*.csv
-reports/*.json
+#reports/tables/*.csv
+#reports/*.json
 mlruns/**
 !mlruns/.gitkeep
