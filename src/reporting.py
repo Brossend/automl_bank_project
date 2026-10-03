@@ -72,8 +72,9 @@ def save_target_distribution(y: pd.Series) -> None:
     """Create the target-distribution figure used by the training report."""
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     distribution = y.value_counts().sort_index()
+    counts = [float(value) for value in distribution.to_list()]
     plt.figure(figsize=(5, 4))
-    plt.bar(["no", "yes"], distribution.values)
+    plt.bar(["no", "yes"], counts)
     plt.title("Target distribution")
     plt.xlabel("Subscribed term deposit")
     plt.ylabel("Count")

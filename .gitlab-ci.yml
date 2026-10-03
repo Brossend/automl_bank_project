@@ -1,4 +1,5 @@
 stages:
+  - quality
   - test
   - build
 
@@ -12,19 +13,27 @@ cache:
   paths:
     - .cache/pip
 
-test:
+.python-job:
   image: python:3.11
-  stage: test
   before_script:
     - python --version
     - python -m pip install --upgrade pip
     - pip install poetry==2.5.1
     - poetry install --no-interaction
+
+quality:
+  extends: .python-job
+  stage: quality
   script:
-    - mkdir -p reports/tables
     - poetry run ruff check .
     - poetry run ruff format --check .
     - poetry run mypy src
+
+tests:
+  extends: .python-job
+  stage: test
+  script:
+    - mkdir -p reports/tables
     - poetry run python -m pytest --junitxml=reports/tables/pytest-report.xml
   artifacts:
     when: always
