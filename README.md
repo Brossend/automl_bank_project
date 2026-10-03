@@ -281,25 +281,27 @@ http://127.0.0.1:5000
 
 ```text
 tests/test_etl.py
+tests/test_predict.py
 tests/test_train.py
 ```
 
 Проверяется:
 
-- очистка данных;
-- удаление дублей;
-- нормализация текстовых значений;
-- преобразование целевого признака;
-- исключение признака `duration`;
-- корректное разделение на train/test;
-- работа preprocessing-пайплайна;
-- корректный расчёт метрик.
+- очистка данных, удаление дублей и нормализация текста;
+- преобразование целевого признака и исключение `duration`;
+- воспроизводимое разделение данных и определение групп признаков;
+- понятная ошибка при отсутствии файла данных;
+- проверка и нормализация входных данных для предсказания;
+- обработка отсутствующих признаков и некорректного JSON;
+- работа preprocessing-пайплайна и расчёт метрик.
 
 Запуск тестов:
 
 ```bash
-pytest
+poetry run pytest
 ```
+
+Актуальный локальный запуск выполняет 11 тестов.
 
 ---
 
@@ -337,25 +339,25 @@ mlruns/
 
 ## 12. CI/CD
 
-CI/CD реализован двумя способами:
+В проекте сохранены две конфигурации CI/CD:
 
 1. GitHub Actions - файл `.github/workflows/ci.yml`.
 2. GitLab CI/CD - файл `.gitlab-ci.yml`.
 
-Workflow выполняет:
-1. загрузку репозитория;
-2. установку Python 3.11;
-3. установку зависимостей;
-4. запуск тестов `python -m pytest`;
-5. сборку Docker-образа.
+Обе конфигурации используют Python 3.11, устанавливают зависимости через Poetry
+и собирают Docker-образ. GitLab CI выполняет основные проверки текущей ветки:
+
+```bash
+poetry run ruff check .
+poetry run ruff format --check .
+poetry run mypy src
+poetry run python -m pytest
+```
 
 На момент сдачи GitHub Actions не запускается из-за ограничения аккаунта GitHub: `GitHub Actions is currently disabled for your account`.
 
-Для дополнительной проверки добавлен GitLab CI/CD.
-Работоспособность шагов также проверена локально:
-- `python -m pytest` - 6 passed;
-- `docker compose build` - образ успешно собран;
-- `docker compose up` - пайплайн выполнен, контейнер завершился с кодом 0.
+GitLab CI остаётся основной конфигурацией для удалённой проверки. Локально Ruff,
+mypy, pytest и pre-commit выполняются успешно, pytest запускает 11 тестов.
 
 GitHub-репозиторий:
 
@@ -364,10 +366,6 @@ https://github.com/Brossend/automl_bank_project
 Ссылка на GitLab-репозиторий:
 
 https://gitlab.com/Brossend2335/automl_bank_project
-
-Ссылка на успешно выполненный GitLab Pipeline:
-
-https://gitlab.com/Brossend2335/automl_bank_project/-/pipelines/2515617869
 
 ---
 
@@ -417,59 +415,55 @@ reports/tables/resource_monitoring.csv
 
 ## 14. Запуск проекта локально
 
-### 1. Создать виртуальное окружение
+Poetry читает настройки из `poetry.toml` и создаёт виртуальное окружение в
+локальном каталоге `.venv`. Вручную создавать или активировать окружение не
+нужно.
+
+### 1. Установить зависимости
 
 ```bash
-python -m venv .venv
+poetry install
 ```
 
-Windows:
+### 2. Скачать датасет
 
 ```bash
-.venv\Scripts\activate
+poetry run python -m src.download_data
 ```
 
-Linux/macOS:
+### 3. Запустить обучение
 
 ```bash
-source .venv/bin/activate
+poetry run python -m src.train
 ```
 
-### 2. Установить зависимости
+### 4. Запустить тесты
 
 ```bash
-pip install -r requirements.txt
+poetry run pytest
 ```
 
-### 3. Скачать датасет
+### 5. Выполнить предсказание или оценку модели
 
 ```bash
-python -m src.download_data
-```
-
-### 4. Запустить обучение
-
-```bash
-python -m src.train
-```
-
-### 5. Запустить тесты
-
-```bash
-pytest
+poetry run python -m src.predict
+poetry run python -m src.evaluate
 ```
 
 ### 6. Запустить мониторинг ресурсов
 
 ```bash
-python -m src.monitor
+poetry run python -m src.monitor
 ```
 
 ### 7. Запустить MLflow UI
 
 ```bash
-mlflow ui
+poetry run mlflow ui
 ```
+
+`requirements.txt` сохранён для совместимости с Docker и не является основным
+способом установки проекта для разработки.
 
 ---
 
@@ -480,10 +474,13 @@ mlflow ui
 ├── .github/
 │   └── workflows/
 │       └── ci.yml
+├── .gitlab-ci.yml
+├── .pre-commit-config.yaml
 ├── data/
 │   ├── raw/
 │   └── processed/
 ├── docs/
+│   ├── production_preparation_report.md
 │   └── teacher_note.md
 ├── models/
 ├── reports/
@@ -508,9 +505,15 @@ mlflow ui
 ├── Dockerfile
 ├── docker-compose.yml
 ├── Makefile
+├── poetry.lock
+├── poetry.toml
+├── pyproject.toml
 ├── README.md
 └── requirements.txt
 ```
+
+Каталог `.venv` создаётся локально и исключён из Git вместе с настройками
+`.idea`.
 
 Ответственности между модулями разделены явно. `train.py` отвечает за обучение и
 подбор гиперпараметров, `predict.py` за предсказание, `model_io.py` за сохранение
