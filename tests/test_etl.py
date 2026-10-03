@@ -1,6 +1,7 @@
 import pandas as pd
+import pytest
 
-from src.etl import clean_data, get_feature_groups, prepare_features, split_dataset
+from src.etl import clean_data, get_feature_groups, load_data, prepare_features, split_dataset
 
 
 def test_clean_data_removes_duplicates_and_normalizes_text():
@@ -59,3 +60,28 @@ def test_feature_groups_detect_numeric_and_categorical():
 
     assert numeric == ["age"]
     assert categorical == ["job"]
+
+
+def test_load_data_reports_missing_file(tmp_path):
+    missing_path = tmp_path / "missing.csv"
+
+    with pytest.raises(FileNotFoundError, match="Dataset was not found"):
+        load_data(missing_path)
+
+
+def test_split_dataset_is_reproducible():
+    df = pd.DataFrame(
+        {
+            "age": list(range(20, 40)),
+            "job": ["a", "b"] * 10,
+            "duration": [1, 2] * 10,
+            "y": ["yes", "no"] * 10,
+        }
+    )
+    X, y = prepare_features(df)
+
+    first_split = split_dataset(X, y)
+    second_split = split_dataset(X, y)
+
+    for first, second in zip(first_split, second_split, strict=True):
+        assert first.index.tolist() == second.index.tolist()

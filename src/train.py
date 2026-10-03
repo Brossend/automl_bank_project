@@ -1,47 +1,50 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import logging
+from typing import TYPE_CHECKING
 
-import joblib
-import numpy as np
 import pandas as pd
+from sklearn.base import ClassifierMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (
-    ConfusionMatrixDisplay,
-    RocCurveDisplay,
-    accuracy_score,
-    f1_score,
-    precision_score,
-    recall_score,
-    roc_auc_score,
-)
+from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from src.config import (
     FIGURES_DIR,
+    MLFLOW_EXPERIMENT_NAME,
+    MODEL_PATH,
     MODELS_DIR,
     N_TRIALS,
+    OPTUNA_STUDY_NAME,
+    OPTUNA_TRIALS_PATH,
     PROCESSED_DATA_DIR,
     RANDOM_STATE,
     REPORTS_DIR,
     TABLES_DIR,
+    TRAINING_REPORT_PATH,
     VALIDATION_SIZE,
 )
 from src.download_data import ensure_dataset
 from src.etl import get_feature_groups, load_data, prepare_features, split_dataset
+from src.logging_utils import configure_logging
+from src.model_io import save_model
+from src.reporting import calculate_metrics, create_figures, save_target_distribution
 
-try:
-    import matplotlib.pyplot as plt
-except Exception as exc:  # pragma: no cover
-    raise RuntimeError("matplotlib is required to create report figures") from exc
+if TYPE_CHECKING:
+    import optuna
+    from optuna.trial import FrozenTrial
+
+
+logger = logging.getLogger(__name__)
 
 
 def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
+    """Build preprocessing for the feature types present in the training data."""
     numeric_features, categorical_features = get_feature_groups(X)
 
     return ColumnTransformer(
@@ -52,7 +55,8 @@ def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     )
 
 
-def build_model(trial):
+def build_model(trial: optuna.Trial | FrozenTrial) -> ClassifierMixin:
+    """Build one of the existing classifiers from an Optuna trial."""
     model_name = trial.suggest_categorical(
         "model",
         ["logistic_regression", "random_forest", "extra_trees"],
@@ -77,72 +81,84 @@ def build_model(trial):
             random_state=RANDOM_STATE,
         )
 
-    return ExtraTreesClassifier(
-        n_estimators=trial.suggest_int("et_n_estimators", 80, 250),
-        max_depth=trial.suggest_int("et_max_depth", 4, 18),
-        min_samples_split=trial.suggest_int("et_min_samples_split", 2, 12),
-        min_samples_leaf=trial.suggest_int("et_min_samples_leaf", 1, 8),
-        class_weight="balanced",
-        n_jobs=-1,
-        random_state=RANDOM_STATE,
+    if model_name == "extra_trees":
+        return ExtraTreesClassifier(
+            n_estimators=trial.suggest_int("et_n_estimators", 80, 250),
+            max_depth=trial.suggest_int("et_max_depth", 4, 18),
+            min_samples_split=trial.suggest_int("et_min_samples_split", 2, 12),
+            min_samples_leaf=trial.suggest_int("et_min_samples_leaf", 1, 8),
+            class_weight="balanced",
+            n_jobs=-1,
+            random_state=RANDOM_STATE,
+        )
+
+    raise ValueError(f"Unsupported model type selected by Optuna: {model_name}")
+
+
+def build_pipeline(X: pd.DataFrame, model: ClassifierMixin) -> Pipeline:
+    """Combine preprocessing and classification into one serializable pipeline."""
+    return Pipeline(
+        steps=[
+            ("preprocessor", build_preprocessor(X)),
+            ("model", model),
+        ]
     )
 
 
-def calculate_metrics(y_true, y_pred, y_proba) -> dict[str, float]:
-    return {
-        "accuracy": float(accuracy_score(y_true, y_pred)),
-        "precision": float(precision_score(y_true, y_pred, zero_division=0)),
-        "recall": float(recall_score(y_true, y_pred, zero_division=0)),
-        "f1": float(f1_score(y_true, y_pred, zero_division=0)),
-        "roc_auc": float(roc_auc_score(y_true, y_proba)),
-    }
+def run_hyperparameter_search(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    X_valid: pd.DataFrame,
+    y_valid: pd.Series,
+    n_trials: int,
+) -> optuna.Study:
+    """Run deterministic Optuna optimization for the existing search space."""
+    if n_trials < 1:
+        raise ValueError("n_trials must be at least 1")
+
+    import optuna
+
+    def objective(trial: optuna.Trial) -> float:
+        pipeline = build_pipeline(X_train, build_model(trial))
+        pipeline.fit(X_train, y_train)
+        valid_pred = pipeline.predict(X_valid)
+        return float(f1_score(y_valid, valid_pred, zero_division=0))
+
+    sampler = optuna.samplers.TPESampler(seed=RANDOM_STATE)
+    study = optuna.create_study(
+        direction="maximize",
+        study_name=OPTUNA_STUDY_NAME,
+        sampler=sampler,
+    )
+    study.optimize(objective, n_trials=n_trials)
+    return study
 
 
-def create_figures(y_test, y_pred, y_proba, metrics: dict[str, float]) -> None:
-    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+def _log_to_mlflow(metrics: dict[str, float], best_params: dict[str, object]) -> None:
+    try:
+        import mlflow
+    except ImportError:
+        logger.warning("MLflow is unavailable; experiment artifacts were not logged")
+        return
 
-    ConfusionMatrixDisplay.from_predictions(y_test, y_pred)
-    plt.title("Confusion matrix")
-    plt.tight_layout()
-    plt.savefig(FIGURES_DIR / "confusion_matrix.png", dpi=150)
-    plt.close()
-
-    RocCurveDisplay.from_predictions(y_test, y_proba)
-    plt.title("ROC curve")
-    plt.tight_layout()
-    plt.savefig(FIGURES_DIR / "roc_curve.png", dpi=150)
-    plt.close()
-
-    names = ["accuracy", "precision", "recall", "f1", "roc_auc"]
-    values = [metrics[name] for name in names]
-    plt.figure(figsize=(8, 4))
-    plt.bar(names, values)
-    plt.ylim(0, 1)
-    plt.title("Model metrics")
-    plt.ylabel("Score")
-    plt.tight_layout()
-    plt.savefig(FIGURES_DIR / "metrics.png", dpi=150)
-    plt.close()
+    mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
+    with mlflow.start_run(run_name="best_automl_pipeline"):
+        mlflow.log_params(best_params)
+        mlflow.log_metrics(metrics)
+        mlflow.log_artifact(str(MODEL_PATH))
+        for figure in FIGURES_DIR.glob("*.png"):
+            mlflow.log_artifact(str(figure), artifact_path="figures")
 
 
-def save_target_distribution(y: pd.Series) -> None:
-    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    distribution = y.value_counts().sort_index()
-    plt.figure(figsize=(5, 4))
-    plt.bar(["no", "yes"], distribution.values)
-    plt.title("Target distribution")
-    plt.xlabel("Subscribed term deposit")
-    plt.ylabel("Count")
-    plt.tight_layout()
-    plt.savefig(FIGURES_DIR / "target_distribution.png", dpi=150)
-    plt.close()
+def _create_output_directories() -> None:
+    for directory in (MODELS_DIR, REPORTS_DIR, FIGURES_DIR, TABLES_DIR, PROCESSED_DATA_DIR):
+        directory.mkdir(parents=True, exist_ok=True)
 
 
 def main(n_trials: int = N_TRIALS) -> dict[str, float]:
+    """Train, evaluate, persist, and log the best model pipeline."""
     ensure_dataset()
-
-    for directory in [MODELS_DIR, REPORTS_DIR, FIGURES_DIR, TABLES_DIR, PROCESSED_DATA_DIR]:
-        directory.mkdir(parents=True, exist_ok=True)
+    _create_output_directories()
 
     df = load_data()
     X, y = prepare_features(df)
@@ -157,40 +173,23 @@ def main(n_trials: int = N_TRIALS) -> dict[str, float]:
         stratify=y_train_full,
     )
 
-    preprocessor = build_preprocessor(X_train)
-
-    import optuna
-
-    def objective(trial) -> float:
-        model = build_model(trial)
-        pipeline = Pipeline(
-            steps=[
-                ("preprocessor", preprocessor),
-                ("model", model),
-            ]
-        )
-        pipeline.fit(X_train, y_train)
-        valid_pred = pipeline.predict(X_valid)
-        return f1_score(y_valid, valid_pred, zero_division=0)
-
-    study = optuna.create_study(direction="maximize", study_name="bank_marketing_automl")
-    study.optimize(objective, n_trials=n_trials)
-
-    best_model = build_model(study.best_trial)
-    final_pipeline = Pipeline(
-        steps=[
-            ("preprocessor", build_preprocessor(X_train_full)),
-            ("model", best_model),
-        ]
+    study = run_hyperparameter_search(
+        X_train,
+        y_train,
+        X_valid,
+        y_valid,
+        n_trials=n_trials,
     )
+
+    final_pipeline = build_pipeline(X_train_full, build_model(study.best_trial))
     final_pipeline.fit(X_train_full, y_train_full)
 
     y_pred = final_pipeline.predict(X_test)
     y_proba = final_pipeline.predict_proba(X_test)[:, 1]
     metrics = calculate_metrics(y_test, y_pred, y_proba)
 
-    joblib.dump(final_pipeline, MODELS_DIR / "best_model.joblib")
-    pd.DataFrame(study.trials_dataframe()).to_csv(TABLES_DIR / "optuna_trials.csv", index=False)
+    save_model(final_pipeline, MODEL_PATH)
+    study.trials_dataframe().to_csv(OPTUNA_TRIALS_PATH, index=False)
 
     report = {
         "best_params": study.best_params,
@@ -199,26 +198,17 @@ def main(n_trials: int = N_TRIALS) -> dict[str, float]:
         "rows": int(len(df)),
         "features_used": list(X.columns),
     }
-    (REPORTS_DIR / "metrics.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    TRAINING_REPORT_PATH.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     create_figures(y_test, y_pred, y_proba, metrics)
+    _log_to_mlflow(metrics, study.best_params)
 
-    try:
-        import mlflow
-    except Exception:
-        mlflow = None
-
-    if mlflow is not None:
-        mlflow.set_experiment("bank_marketing_automl")
-        with mlflow.start_run(run_name="best_automl_pipeline"):
-            mlflow.log_params(study.best_params)
-            mlflow.log_metrics(metrics)
-            mlflow.log_artifact(str(MODELS_DIR / "best_model.joblib"))
-            for figure in FIGURES_DIR.glob("*.png"):
-                mlflow.log_artifact(str(figure), artifact_path="figures")
-
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+    logger.info("Training completed; model saved to %s", MODEL_PATH)
+    logger.info("Test metrics: %s", json.dumps(metrics, ensure_ascii=False))
     return metrics
 
 
 if __name__ == "__main__":
+    configure_logging()
     main()

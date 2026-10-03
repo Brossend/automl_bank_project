@@ -22,10 +22,17 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install poetry==2.5.1
+          poetry install --no-interaction
 
       - name: Run tests
-        run: pytest
+        run: poetry run pytest
+
+      - name: Run code quality checks
+        run: |
+          poetry run ruff check .
+          poetry run ruff format --check .
+          poetry run mypy src
 
       - name: Build Docker image
         run: docker build -t automl-bank-marketing .

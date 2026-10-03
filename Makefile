@@ -1,20 +1,34 @@
 install:
-	pip install -r requirements.txt
+	poetry install
 
 download:
-	python -m src.download_data
+	poetry run python -m src.download_data
 
 train:
-	python -m src.train
+	poetry run python -m src.train
 
 evaluate:
-	python -m src.evaluate
+	poetry run python -m src.evaluate
 
 test:
-	pytest
+	poetry run pytest
 
 monitor:
-	python -m src.monitor
+	poetry run python -m src.monitor
+
+lint:
+	poetry run ruff check .
+	poetry run ruff format --check .
+
+format:
+	poetry run ruff check --fix .
+	poetry run ruff format .
+
+typecheck:
+	poetry run mypy src
+
+pre-commit:
+	poetry run pre-commit run --all-files
 
 docker-build:
 	docker compose build

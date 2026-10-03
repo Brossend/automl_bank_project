@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import shutil
 import tempfile
 import urllib.request
@@ -7,6 +8,9 @@ import zipfile
 from pathlib import Path
 
 from src.config import DATASET_URL, RAW_DATA_DIR, RAW_DATA_PATH
+from src.logging_utils import configure_logging
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_nested_bank_csv(archive_path: Path, output_path: Path) -> None:
@@ -34,28 +38,35 @@ def _extract_nested_bank_csv(archive_path: Path, output_path: Path) -> None:
 def download_dataset(force: bool = False) -> Path:
     RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    if RAW_DATA_PATH.exists() and not force:
-        print(f"Dataset already exists: {RAW_DATA_PATH}")
+    if RAW_DATA_PATH.exists() and not RAW_DATA_PATH.is_file():
+        raise IsADirectoryError(f"Dataset path is not a file: '{RAW_DATA_PATH}'")
+
+    if RAW_DATA_PATH.is_file() and not force:
+        logger.info("Dataset already exists: %s", RAW_DATA_PATH)
         return RAW_DATA_PATH
 
     archive_path = RAW_DATA_DIR / "bank_marketing.zip"
-    print(f"Downloading dataset from {DATASET_URL}")
-    urllib.request.urlretrieve(DATASET_URL, archive_path)
+    logger.info("Downloading dataset from %s", DATASET_URL)
+    try:
+        urllib.request.urlretrieve(DATASET_URL, archive_path)
+        logger.info("Extracting %s", RAW_DATA_PATH.name)
+        _extract_nested_bank_csv(archive_path, RAW_DATA_PATH)
+    except (OSError, zipfile.BadZipFile) as exc:
+        raise RuntimeError(f"Failed to download or extract dataset from {DATASET_URL}") from exc
+    finally:
+        archive_path.unlink(missing_ok=True)
 
-    print("Extracting bank.csv")
-    _extract_nested_bank_csv(archive_path, RAW_DATA_PATH)
-
-    archive_path.unlink(missing_ok=True)
-    print(f"Dataset saved to {RAW_DATA_PATH}")
+    logger.info("Dataset saved to %s", RAW_DATA_PATH)
 
     return RAW_DATA_PATH
 
 
 def ensure_dataset() -> Path:
-    if not RAW_DATA_PATH.exists():
+    if not RAW_DATA_PATH.is_file():
         return download_dataset(force=False)
     return RAW_DATA_PATH
 
 
 if __name__ == "__main__":
+    configure_logging()
     download_dataset(force=True)
